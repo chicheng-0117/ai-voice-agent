@@ -1,5 +1,6 @@
 
 import os
+import logging
 from dotenv import load_dotenv
 
 from livekit import agents, rtc
@@ -8,6 +9,8 @@ from livekit.plugins import fishaudio, noise_cancellation, silero, openai, deepg
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 load_dotenv(".env.local")
+
+logger = logging.getLogger(__name__)
 
 
 class Assistant(Agent):
@@ -28,8 +31,23 @@ class Assistant(Agent):
 server = AgentServer()
 
 
-@server.rtc_session()
+@server.rtc_session(agent_name="peppa")
 async def peppa_agent(ctx: agents.JobContext):
+    # 只处理 metadata 中声明了 agent:peppa 的房间
+    room_metadata = ctx.room.metadata or ""
+    expected_metadata = "agent:peppa"
+
+    if expected_metadata not in room_metadata:
+        logger.info(
+            f"Agent 'peppa' 跳过房间 {ctx.room.name}，"
+            f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
+        )
+        return
+
+    logger.info(
+        f"Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
+    )
+
     reference_id = os.getenv("FISH_REFERENCE_ID")
     if not reference_id:
         raise RuntimeError(
