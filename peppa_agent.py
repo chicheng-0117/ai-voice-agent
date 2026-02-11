@@ -10,6 +10,10 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 load_dotenv(".env.local")
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -31,21 +35,43 @@ class Assistant(Agent):
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="peppa")
+@server.rtc_session()
 async def peppa_agent(ctx: agents.JobContext):
-    # 只处理 metadata 中声明了 agent:peppa 的房间
-    room_metadata = ctx.room.metadata or ""
-    expected_metadata = "agent:peppa"
+    """Peppa Agent - 处理所有房间，通过元数据判断是否处理"""
+    logger.info(
+        f"收到任务: 房间={ctx.room.name}, "
+        f"job_id={ctx.job.id}"
+    )
 
+# 关键：先连接到房间，这样才能获取完整的房间信息（包括 metadata）
+    try:
+        await ctx.connect()
+        logger.info(f"✓ 已连接到房间: {ctx.room.name}")
+    except Exception as e:
+        logger.error(f"✗ 连接房间失败: {e}", exc_info=True)
+        raise
+    
+    # 连接后，获取完整的房间信息（包括 metadata）
+    room_metadata = ctx.room.metadata or ""
+    
+    logger.info(
+        f"房间信息: name={ctx.room.name}, "
+        f"metadata={room_metadata or '(无)'}, "
+        f"room_sid={getattr(ctx.room, 'sid', 'N/A')}"
+    )
+    
+    # 检查元数据是否匹配
+    expected_metadata = "agent:peppa"
+    
     if expected_metadata not in room_metadata:
         logger.info(
-            f"Agent 'peppa' 跳过房间 {ctx.room.name}，"
+            f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
             f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
         )
-        return
-
+        return  # 不匹配，跳过此任务
+    
     logger.info(
-        f"Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
+        f"✓ Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
     )
 
     reference_id = os.getenv("FISH_REFERENCE_ID")
@@ -92,6 +118,7 @@ async def peppa_agent(ctx: agents.JobContext):
         turn_detection=MultilingualModel(),
     )
 
+    # 启动会话
     await session.start(
         room=ctx.room,
         agent=Assistant(),
@@ -106,23 +133,10 @@ async def peppa_agent(ctx: agents.JobContext):
         ),
     )
     
-    # 注意：participant metadata 通常在创建 agent token 时设置
-    # 如果需要在 agent 端设置 metadata，需要在创建 token 的 API 调用中设置
-    # 例如在 ai-voice-service 项目中生成 token 时设置 participant_metadata="agent:peppa"
-
-    await session.generate_reply(
-        instructions="""
-        You are Peppa Pig, a cute, lively, and slightly mischievous little pig.
-        Your speaking style:
-        - Likes to say "Ooh ooh" and "Ha ha"
-        - Light and cheerful tone
-        - Uses simple vocabulary
-        - Frequently mentions family and friends (George, Daddy Pig, Mummy Pig)
-        - Full of curiosity about the world
-        - Maintains a childlike innocence and a sense of humor
-        Please reply in English, keeping Peppa Pig's characteristics. Avoid using complex formatting or punctuation.
-        """
-    )
+    logger.info(f"✓ Agent 'peppa' 会话已启动，房间: {ctx.room.name}")
+    
+    # 生成初始回复
+    await session.generate_reply()
 
 
 if __name__ == "__main__":
