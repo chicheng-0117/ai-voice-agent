@@ -116,19 +116,28 @@ async def peppa_agent(ctx: agents.JobContext):
         f"metadata={room_metadata or '(无)'}"
     )
     
-    # 检查元数据是否匹配
-    expected_metadata = "agent:peppa"
+    # 如果房间名称是 "console"，跳过 agent:peppa 校验
+    room_name = ctx.room.name
+    is_console_room = room_name.lower() == "console"
     
-    # if expected_metadata not in room_metadata:
-    #     logger.info(
-    #         f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
-    #         f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
-    #     )
-    #     return  # 不匹配，跳过此任务
-
-    logger.info(
-        f"✓ Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
-    )
+    if not is_console_room:
+        # 检查元数据是否匹配
+        expected_metadata = "agent:peppa"
+        
+        if expected_metadata not in room_metadata:
+            logger.info(
+                f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
+                f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
+            )
+            return  # 不匹配，跳过此任务
+        
+        logger.info(
+            f"✓ Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
+        )
+    else:
+        logger.info(
+            f"✓ Agent 'peppa' 处理 console 房间 {ctx.room.name}（跳过 metadata 校验）"
+        )
 
     reference_id = os.getenv("FISH_REFERENCE_ID")
     if not reference_id:
@@ -310,21 +319,26 @@ async def peppa_agent(ctx: agents.JobContext):
     async def _save_conversation_async(room_name: str, user_id: str, role: str, content: str):
         """异步保存对话记录（完全非阻塞）"""
         try:
+            logger.debug(f"开始执行 _save_conversation_async: room={room_name}, user={user_id}, role={role}")
+            
             if not content or not content.strip():
-                logger.debug(f"对话内容为空，跳过保存: role={role}")
+                logger.debug(f"对话内容为空，跳过保存: role={role}, room={room_name}")
                 return
             
             logger.info(f"DEBUG: 准备保存对话记录: room={room_name}, user={user_id}, role={role}, content={content[:50]}...")
             
+            logger.debug(f"准备连接数据库: room={room_name}")
             async with AsyncSessionLocal() as db:
                 try:
+                    logger.debug(f"调用 ConversationRepository.create: room={room_name}, user={user_id}, role={role}")
                     await ConversationRepository.create(
                         db, room_name, user_id, role, content
                     )
+                    logger.debug(f"准备提交事务: room={room_name}")
                     await db.commit()
                     logger.info(f"✓ 已保存对话记录: {room_name} - {role} - {content[:50]}...")
                 except Exception as e:
-                    logger.error(f"保存对话记录失败（不影响Agent）: {e}", exc_info=True)
+                    logger.error(f"保存对话记录失败（不影响Agent）: room={room_name}, error={e}", exc_info=True)
                     await db.rollback()
         except Exception as e:
             logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
@@ -472,29 +486,34 @@ async def peppa_agent(ctx: agents.JobContext):
                 user_id = get_user_id_from_room()
             
             if not user_id:
-                logger.debug("未找到用户ID，跳过对话记录")
+                logger.warning(f"未找到用户ID，跳过对话记录: event_name={event_name}, room={room_name}")
                 return
             
             logger.info(f"DEBUG: 处理对话事件: role={role}, user_id={user_id}, content={content[:50]}...")
             
             # 异步保存对话记录（完全非阻塞）
+            logger.debug(f"创建异步任务保存对话记录: room={room_name}, user={user_id}, role={role}")
             asyncio.create_task(
                 _save_conversation_async(room_name, user_id, role, content)
             )
+            logger.debug(f"异步任务已创建: room={room_name}")
             
         except Exception as e:
             logger.error(f"处理对话事件失败（不影响Agent）: {e}", exc_info=True)
     
     def setup_conversation_hooks():
         """设置对话记录钩子（尝试多种可能的事件）"""
+        logger.info(f"开始设置对话记录钩子，房间: {room_name}")
+        
         # 尝试注册 conversation_item_added 事件
         try:
             @session.on("conversation_item_added")
             def on_conversation_item_added(event):
+                logger.debug(f"DEBUG: conversation_item_added 事件被触发")
                 _handle_conversation_event(event, "conversation_item_added")
             logger.info("✓ 成功注册 conversation_item_added 事件")
         except Exception as e:
-            logger.debug(f"无法注册 conversation_item_added 事件: {e}")
+            logger.warning(f"无法注册 conversation_item_added 事件: {e}")
         
         # 尝试注册 user_message 事件
         try:
@@ -644,10 +663,14 @@ async def peppa_agent(ctx: agents.JobContext):
                 await asyncio.sleep(5)  # 出错后等待更长时间
     
     # 设置事件钩子
+    logger.info(f"准备设置对话记录功能，房间: {room_name}")
     setup_conversation_hooks()
+    logger.info(f"✓ 对话记录钩子设置完成，房间: {room_name}")
     
     # 启动后台任务定期检查对话历史
+    logger.info(f"启动定期检查对话历史任务，房间: {room_name}")
     asyncio.create_task(save_conversation_periodically())
+    logger.info(f"✓ 定期检查对话历史任务已启动，房间: {room_name}")
     
     # 生成初始回复
     await session.generate_reply()
