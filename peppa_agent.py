@@ -1,14 +1,20 @@
 
 import os
 import logging
+import asyncio
+from datetime import datetime
 from dotenv import load_dotenv
+
+# ⚠️ 必须在所有导入之前加载环境变量
+load_dotenv(".env.local")
 
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, room_io
 from livekit.plugins import fishaudio, noise_cancellation, silero, openai, deepgram
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-load_dotenv(".env.local")
+# 导入数据库模块
+from database import AsyncSessionLocal, RoomRepository
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,13 +118,13 @@ async def peppa_agent(ctx: agents.JobContext):
     # 检查元数据是否匹配
     expected_metadata = "agent:peppa"
     
-    if expected_metadata not in room_metadata:
-        logger.info(
-            f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
-            f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
-        )
-        return  # 不匹配，跳过此任务
-    
+    # if expected_metadata not in room_metadata:
+    #     logger.info(
+    #         f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
+    #         f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
+    #     )
+    #     return  # 不匹配，跳过此任务
+    #
     logger.info(
         f"✓ Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
     )
@@ -182,6 +188,104 @@ async def peppa_agent(ctx: agents.JobContext):
     )
     
     logger.info(f"✓ Agent 'peppa' 会话已启动，房间: {ctx.room.name}")
+    
+    # ========== 用户进入房间的回调 ==========
+    @ctx.room.on("participant_connected")
+    async def on_participant_connected(participant: rtc.RemoteParticipant):
+        """用户进入房间的回调 - 记录用户加入时间"""
+        try:
+            # 跳过 Agent 自己
+            if participant.identity.startswith("agent-") or participant.identity.startswith("Agent-"):
+                logger.debug(f"跳过 Agent 参与者: {participant.identity}")
+                return
+            
+            user_id = participant.identity
+            room_name = ctx.room.name
+            
+            logger.info(f"用户 {user_id} 进入房间 {room_name}")
+            
+            # 更新数据库：记录用户加入时间（完全非阻塞）
+            asyncio.create_task(
+                _update_user_joined_async(room_name, user_id)
+            )
+        except Exception as e:
+            logger.error(f"处理用户进入回调失败（不影响Agent）: {e}", exc_info=True)
+    
+    async def _update_user_joined_async(room_name: str, user_id: str):
+        """异步更新用户加入时间（完全非阻塞）"""
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    # 检查房间是否存在
+                    room = await RoomRepository.get_by_name(db, room_name)
+                    if room:
+                        # 更新用户加入时间（如果还没有记录）
+                        if not room.user_joined_at:
+                            await RoomRepository.update_user_joined(db, room_name)
+                            await db.commit()
+                            logger.info(f"✓ 已记录用户 {user_id} 加入房间 {room_name}")
+                        else:
+                            logger.debug(f"用户 {user_id} 加入时间已存在，跳过更新")
+                    else:
+                        logger.warning(f"房间 {room_name} 不存在于数据库中")
+                except Exception as e:
+                    logger.error(f"记录用户加入失败（不影响Agent）: {e}", exc_info=True)
+                    await db.rollback()
+        except Exception as e:
+            logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
+    
+    # ========== 用户离开房间的回调 ==========
+    @ctx.room.on("participant_disconnected")
+    async def on_participant_disconnected(participant: rtc.RemoteParticipant):
+        """用户离开房间的回调 - 记录用户离开时间和聊天时长"""
+        try:
+            # 跳过 Agent 自己
+            if participant.identity.startswith("agent-") or participant.identity.startswith("Agent-"):
+                logger.debug(f"跳过 Agent 参与者: {participant.identity}")
+                return
+            
+            user_id = participant.identity
+            room_name = ctx.room.name
+            
+            logger.info(f"用户 {user_id} 离开房间 {room_name}")
+            
+            # 更新数据库：记录用户离开时间和聊天时长（完全非阻塞）
+            asyncio.create_task(
+                _update_user_left_async(room_name, user_id)
+            )
+        except Exception as e:
+            logger.error(f"处理用户离开回调失败（不影响Agent）: {e}", exc_info=True)
+    
+    async def _update_user_left_async(room_name: str, user_id: str):
+        """异步更新用户离开时间（完全非阻塞）"""
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    room = await RoomRepository.get_by_name(db, room_name)
+                    if room and room.user_joined_at:
+                        # 计算聊天时长
+                        leave_time = datetime.now()
+                        duration = (leave_time - room.user_joined_at).total_seconds()
+                        chat_duration = max(0, int(duration))
+                        
+                        # 更新用户离开时间（如果还没有记录）
+                        if not room.user_left_at:
+                            await RoomRepository.update_user_left(
+                                db, room_name, chat_duration, left_at=leave_time
+                            )
+                            await db.commit()
+                            logger.info(f"✓ 已记录用户 {user_id} 离开房间 {room_name}，聊天时长: {chat_duration}秒")
+                        else:
+                            logger.debug(f"用户 {user_id} 离开时间已存在，跳过更新")
+                    elif not room:
+                        logger.warning(f"房间 {room_name} 不存在于数据库中")
+                    elif not room.user_joined_at:
+                        logger.warning(f"房间 {room_name} 没有用户加入记录，跳过离开时间更新")
+                except Exception as e:
+                    logger.error(f"记录用户离开失败（不影响Agent）: {e}", exc_info=True)
+                    await db.rollback()
+        except Exception as e:
+            logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
     
     # 生成初始回复
     await session.generate_reply()
