@@ -28,77 +28,66 @@ class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(
             instructions="""
-            You are Peppa Pig.
+            Character
+            You are Peppa Pig from the beloved British animated series. You are a cheerful, curious, and playful 4-year-old pig who loves talking with children aged 8-12. Your task is to have fun, friendly conversations with users, answer their questions, share stories about your adventures, and help them feel happy and engaged. You speak in a natural, child-friendly way that makes children feel comfortable and excited to chat with you.
             
-            Core Identity:
-            You are the real Peppa Pig.
-            You live in a small yellow house with George, Daddy Pig, and Mummy Pig.
-            You are a happy, curious, playful 4-year-old pig who loves muddy puddles, playing with George, and chatting with children.
-            You are kind, cheerful, and always excited to talk to kids aged 8-12.
+            Goals
+            - Engage in natural, flowing conversations with children aged 8-12
+            - Answer questions in a simple, clear, and age-appropriate manner
+            - Share fun stories about your family (George, Daddy Pig, Mummy Pig) and adventures
+            - Help children feel happy, curious, and entertained
+            - Encourage children to share their own stories and experiences
+            - Maintain a cheerful and enthusiastic conversation throughout
             
-            Speaking Style (must follow strictly):
-            - Speak like Peppa Pig from the cartoon.
-            - Use short, simple, child-friendly sentences.
-            - Use British English.
-            - Sound playful, joyful, and innocent.
-            - Talk like a young child, not like an adult.
-            - Do not use complex words or long explanations.
-            - Never mention that you are a “character,” “AI,” or “acting.”
+            Skills
+            - Communicate in simple, clear English suitable for 8-12 year olds
+            - Use age-appropriate vocabulary and sentence structures
+            - Tell engaging stories about jumping in muddy puddles, family adventures, and daily activities
+            - Ask curious questions to keep the conversation flowing
+            - Respond with enthusiasm and genuine interest to what children share
+            - Adapt your responses to match the child's energy and interests
             
-            Mandatory Personality Rules (must not break):
-            - Every single reply MUST include at least one "Oink!" or "Oink oink!"
-            - Every single reply MUST include at least one "Ha ha!"
-            - You must never skip the pig sound.
-            - You must always stay in Peppa’s personality.
-            - You must never switch to a normal adult AI tone.
+            Workflow
+            1. Greet the user warmly and enthusiastically when they start chatting
+            2. Listen carefully to what they say and respond with genuine interest
+            3. Share relevant stories or experiences from your life (jumping in puddles, playing with George, etc.)
+            4. Ask follow-up questions to keep the conversation going
+            5. Use simple language and short sentences to ensure clarity
+            6. Show excitement and curiosity about the topics discussed
+            7. End responses in a way that encourages the child to continue the conversation
             
-            Child Safety and Content Rules (strictly enforced):
-            You are NOT allowed to talk about:
-            - Violence, fighting, weapons, or harm
-            - Scary things, death, ghosts, or horror
-            - Sex, romance, or adult relationships
-            - Politics, religion, gambling, or money topics
-            - Drugs, alcohol, or smoking
-            - Swearing, bullying, or discrimination
-            - Dangerous real-world actions (fire, climbing high places, crossing roads alone, etc.)
+            Constraints
+            - Maintain Peppa Pig's characteristic cheerful, playful, and innocent personality
+            - Use simple vocabulary appropriate for 8-12 year olds (avoid complex words)
+            - Keep sentences short and clear
+            - Frequently use "Oink oink!" or "Oink!" as your characteristic pig sound
+            - Include giggles ("Ha ha!") when something is funny or exciting
+            - Mention family members naturally (George, Daddy Pig, Mummy Pig) when relevant
+            - Use British English expressions and pronunciation
+            - Never use complex formatting, emojis, asterisks, or special symbols
+            - Reply in English only
+            - Stay in character as Peppa Pig at all times - never break character
+            - Do not refer to yourself as a character or mention that you're from a TV show
+            - Keep responses conversational and natural, not overly structured
+            - Avoid making predictions or giving advice beyond what a 4-year-old would naturally say
+            - Be encouraging and positive, but maintain childlike authenticity
             
-            If a child asks about any unsafe topic:
-            You must:
-            1. Gently refuse in a friendly Peppa tone  
-            2. Say it is not suitable for little pigs  
-            3. Redirect to a safe topic like play, school, family, or muddy puddles  
+            Output Format
+            Deliver your responses in a natural, conversational style that flows like a real chat between friends. The tone should be:
+            - Friendly and warm
+            - Excited and enthusiastic
+            - Simple and easy to understand
+            - Playful and fun
+            - Genuinely curious about the other person
             
-            Example safe redirection:
-            “That sounds a bit scary for little pigs, so I can’t talk about that. Oink! Ha ha! Let’s talk about jumping in muddy puddles instead. Do you like rainy days?”
+            Structure your responses naturally:
+            - Start with a warm greeting or acknowledgment of what they said
+            - Share your thoughts, stories, or answers in a simple way
+            - Ask questions to keep the conversation going
+            - Use "Oink!" or "Ha ha!" naturally when appropriate
+            - End in a way that invites them to continue chatting
             
-            Topics you ARE allowed to talk about:
-            - Jumping in muddy puddles with George  
-            - Playing with Suzy Sheep at school  
-            - Baking cakes with Mummy Pig  
-            - Going on family picnics  
-            - Rainy days, bicycles, birthdays, and games  
-            - Simple daily adventures with family and friends  
-            
-            Topics you must avoid:
-            - Adult themes  
-            - Complex advice  
-            - Predicting the future  
-            - Technical or complicated explanations  
-            - Breaking character  
-            
-            Conversation Structure (must follow every time):
-            Each reply must include:
-            1. A friendly response to what the child said  
-            2. A short Peppa story about your life  
-            3. One “Oink!” or “Oink oink!”  
-            4. One “Ha ha!”  
-            5. One simple question to keep the chat going  
-            
-            Style Example (tone reference only):
-            “Hello! I love rainy days because I can jump in muddy puddles with George. Oink! Ha ha! Do you like puddles too?”
-            
-            You must always stay in character as Peppa Pig.
-            You must never break character.""",
+            Remember: You're having a real conversation with a child, not giving a formal presentation. Be spontaneous, natural, and genuinely interested in what they have to say.""",
         )
 
 
@@ -316,69 +305,7 @@ async def peppa_agent(ctx: agents.JobContext):
                 _update_user_joined_async(room_name, user_id)
             )
     
-    # ========== 对话记录功能（使用 conversation_item_added 事件）==========
-    @session.on("conversation_item_added")
-    def on_conversation_item_added(event):
-        """对话项添加到历史时触发 - 保存聊天记录"""
-        try:
-            # 获取对话项
-            item = getattr(event, "item", None)
-            if not item:
-                return
-            
-            # 只处理文本类型的对话项
-            item_type = getattr(item, "type", None)
-            if item_type != "text":
-                return
-            
-            # 获取文本内容
-            text = getattr(item, "text", None) or getattr(item, "content", None)
-            if not text or not text.strip():
-                return
-            
-            # 判断角色：user 或 agent
-            # 根据 LiveKit 的实现，通常有 source 或 role 字段
-            source = getattr(item, "source", None) or getattr(item, "role", None) or ""
-            source_lower = source.lower() if source else ""
-            
-            if source_lower in ("user", "remote", "participant"):
-                role = "user"
-            elif source_lower in ("assistant", "agent", "local", "agent_response"):
-                role = "agent"
-            else:
-                # 如果无法判断，尝试从其他字段推断
-                # 有些实现中，user 的对话项会有 participant_identity
-                participant_identity = getattr(item, "participant_identity", None)
-                if participant_identity:
-                    # 如果 participant_identity 不是 agent，就是 user
-                    if not participant_identity.startswith("agent-") and not participant_identity.startswith("Agent-"):
-                        role = "user"
-                    else:
-                        role = "agent"
-                else:
-                    # 无法判断，跳过
-                    logger.debug(f"无法判断对话项角色，跳过: source={source}")
-                    return
-            
-            # 获取用户ID
-            user_id = getattr(item, "user_identity", None) \
-                   or getattr(item, "participant_identity", None)
-            
-            if not user_id:
-                # 从房间参与者中查找
-                user_id = get_user_id_from_room()
-            
-            if not user_id:
-                logger.debug("未找到用户ID，跳过对话记录")
-                return
-            
-            # 异步保存对话记录（完全非阻塞）
-            asyncio.create_task(
-                _save_conversation_async(room_name, user_id, role, text)
-            )
-            
-        except Exception as e:
-            logger.error(f"处理对话项添加失败（不影响Agent）: {e}", exc_info=True)
+    # ========== 对话记录功能（使用多种方式确保能获取到）==========
     
     async def _save_conversation_async(room_name: str, user_id: str, role: str, content: str):
         """异步保存对话记录（完全非阻塞）"""
@@ -387,18 +314,340 @@ async def peppa_agent(ctx: agents.JobContext):
                 logger.debug(f"对话内容为空，跳过保存: role={role}")
                 return
             
+            logger.info(f"DEBUG: 准备保存对话记录: room={room_name}, user={user_id}, role={role}, content={content[:50]}...")
+            
             async with AsyncSessionLocal() as db:
                 try:
                     await ConversationRepository.create(
                         db, room_name, user_id, role, content
                     )
                     await db.commit()
-                    logger.debug(f"✓ 已保存对话记录: {room_name} - {role}")
+                    logger.info(f"✓ 已保存对话记录: {room_name} - {role} - {content[:50]}...")
                 except Exception as e:
                     logger.error(f"保存对话记录失败（不影响Agent）: {e}", exc_info=True)
                     await db.rollback()
         except Exception as e:
             logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
+    
+    def _handle_conversation_event(event, event_name: str = ""):
+        """处理对话事件（通用处理函数）"""
+        try:
+            logger.info(f"DEBUG: 对话事件触发: event_name={event_name}, event={event}, type={type(event)}")
+            
+            # 尝试多种方式获取内容
+            content = None
+            role = None
+            
+            # 优先处理 ConversationItemAddedEvent（有 item 属性）
+            if hasattr(event, "item"):
+                item = event.item
+                logger.info(f"DEBUG: 从 event.item 获取: item={item}, item_type={type(item)}")
+                
+                # 获取 content（可能是列表或字符串）
+                raw_content = getattr(item, "content", None)
+                if raw_content:
+                    # 如果是列表，合并为字符串
+                    if isinstance(raw_content, list):
+                        content = " ".join(str(c) for c in raw_content if c)
+                    elif isinstance(raw_content, str):
+                        content = raw_content
+                    else:
+                        content = str(raw_content)
+                else:
+                    # 尝试其他字段
+                    raw_content = getattr(item, "text", None) or getattr(item, "message", None)
+                    if raw_content:
+                        if isinstance(raw_content, list):
+                            content = " ".join(str(c) for c in raw_content if c)
+                        else:
+                            content = str(raw_content)
+                
+                # 获取角色（直接从 item.role 获取）
+                role = getattr(item, "role", None) or getattr(item, "source", None) or getattr(item, "sender", None)
+                
+                logger.info(f"DEBUG: 提取结果: content={content}, role={role}")
+            
+            # 如果 event 本身就是字符串
+            elif isinstance(event, str):
+                content = event
+                role = "user"  # 默认假设是用户消息
+            # 如果 event 有 content 或 text 属性
+            elif hasattr(event, "content"):
+                raw_content = event.content
+                if isinstance(raw_content, list):
+                    content = " ".join(str(c) for c in raw_content if c)
+                else:
+                    content = str(raw_content) if raw_content else None
+                role = getattr(event, "role", None) or getattr(event, "source", None)
+            elif hasattr(event, "text"):
+                raw_content = event.text
+                if isinstance(raw_content, list):
+                    content = " ".join(str(c) for c in raw_content if c)
+                else:
+                    content = str(raw_content) if raw_content else None
+                role = getattr(event, "role", None) or getattr(event, "source", None)
+            elif hasattr(event, "message"):
+                raw_content = event.message
+                if isinstance(raw_content, list):
+                    content = " ".join(str(c) for c in raw_content if c)
+                else:
+                    content = str(raw_content) if raw_content else None
+                role = getattr(event, "role", None) or getattr(event, "source", None)
+            # 如果是字典类型
+            elif isinstance(event, dict):
+                raw_content = event.get("content") or event.get("text") or event.get("message")
+                if raw_content:
+                    if isinstance(raw_content, list):
+                        content = " ".join(str(c) for c in raw_content if c)
+                    else:
+                        content = str(raw_content)
+                role = event.get("role") or event.get("source") or event.get("sender")
+            
+            # 验证内容（处理字符串和列表）
+            if not content:
+                logger.debug(f"事件内容为空，跳过: event_name={event_name}")
+                return
+            
+            # 如果是字符串，检查是否为空
+            if isinstance(content, str):
+                if not content.strip():
+                    logger.debug(f"事件内容为空字符串，跳过: event_name={event_name}")
+                    return
+            # 如果是其他类型，转换为字符串
+            else:
+                content = str(content)
+                if not content.strip():
+                    logger.debug(f"事件内容转换后为空，跳过: event_name={event_name}")
+                    return
+            
+            # 判断角色
+            if not role:
+                # 从事件名称推断
+                if "user" in event_name.lower():
+                    role = "user"
+                elif "agent" in event_name.lower() or "assistant" in event_name.lower():
+                    role = "agent"
+                else:
+                    # 尝试从 participant_identity 推断
+                    participant_identity = None
+                    if hasattr(event, "participant_identity"):
+                        participant_identity = event.participant_identity
+                    elif hasattr(event, "user_identity"):
+                        participant_identity = event.user_identity
+                    elif isinstance(event, dict):
+                        participant_identity = event.get("participant_identity") or event.get("user_identity")
+                    
+                    if participant_identity:
+                        role = "user" if not participant_identity.startswith("agent-") else "agent"
+                    else:
+                        role = "user"  # 默认假设是用户消息
+            
+            # 标准化角色名称
+            if role.lower() in ("user", "remote", "participant"):
+                role = "user"
+            elif role.lower() in ("assistant", "agent", "local"):
+                role = "agent"
+            
+            # 获取用户ID
+            user_id = None
+            
+            # 优先从 event.item 获取（如果是 ConversationItemAddedEvent）
+            if hasattr(event, "item"):
+                item = event.item
+                user_id = getattr(item, "user_identity", None) \
+                       or getattr(item, "participant_identity", None) \
+                       or getattr(item, "identity", None)
+            
+            # 如果还没有，从 event 本身获取
+            if not user_id:
+                if hasattr(event, "user_identity"):
+                    user_id = event.user_identity
+                elif hasattr(event, "participant_identity"):
+                    user_id = event.participant_identity
+                elif isinstance(event, dict):
+                    user_id = event.get("user_identity") or event.get("participant_identity")
+            
+            # 最后从房间参与者中查找
+            if not user_id:
+                user_id = get_user_id_from_room()
+            
+            if not user_id:
+                logger.debug("未找到用户ID，跳过对话记录")
+                return
+            
+            logger.info(f"DEBUG: 处理对话事件: role={role}, user_id={user_id}, content={content[:50]}...")
+            
+            # 异步保存对话记录（完全非阻塞）
+            asyncio.create_task(
+                _save_conversation_async(room_name, user_id, role, content)
+            )
+            
+        except Exception as e:
+            logger.error(f"处理对话事件失败（不影响Agent）: {e}", exc_info=True)
+    
+    def setup_conversation_hooks():
+        """设置对话记录钩子（尝试多种可能的事件）"""
+        # 尝试注册 conversation_item_added 事件
+        try:
+            @session.on("conversation_item_added")
+            def on_conversation_item_added(event):
+                _handle_conversation_event(event, "conversation_item_added")
+            logger.info("✓ 成功注册 conversation_item_added 事件")
+        except Exception as e:
+            logger.debug(f"无法注册 conversation_item_added 事件: {e}")
+        
+        # 尝试注册 user_message 事件
+        try:
+            @session.on("user_message")
+            def on_user_message(event):
+                _handle_conversation_event(event, "user_message")
+            logger.info("✓ 成功注册 user_message 事件")
+        except Exception as e:
+            logger.debug(f"无法注册 user_message 事件: {e}")
+        
+        # 尝试注册 agent_message 事件
+        try:
+            @session.on("agent_message")
+            def on_agent_message(event):
+                _handle_conversation_event(event, "agent_message")
+            logger.info("✓ 成功注册 agent_message 事件")
+        except Exception as e:
+            logger.debug(f"无法注册 agent_message 事件: {e}")
+        
+        # 尝试注册 message_added 事件
+        try:
+            @session.on("message_added")
+            def on_message_added(event):
+                _handle_conversation_event(event, "message_added")
+            logger.info("✓ 成功注册 message_added 事件")
+        except Exception as e:
+            logger.debug(f"无法注册 message_added 事件: {e}")
+    
+    async def save_conversation_periodically():
+        """定期检查并保存对话历史（最可靠的方式）"""
+        saved_message_hashes = set()
+        
+        while True:
+            try:
+                # 直接访问 session.conversation
+                if hasattr(session, "conversation"):
+                    conv = session.conversation
+                    messages = []
+                    
+                    # 尝试多种方式获取消息列表
+                    if hasattr(conv, "messages"):
+                        try:
+                            messages = list(conv.messages) if hasattr(conv.messages, "__iter__") else []
+                        except:
+                            messages = []
+                    elif hasattr(conv, "items"):
+                        try:
+                            messages = list(conv.items) if hasattr(conv.items, "__iter__") else []
+                        except:
+                            messages = []
+                    elif hasattr(conv, "history"):
+                        try:
+                            messages = list(conv.history) if hasattr(conv.history, "__iter__") else []
+                        except:
+                            messages = []
+                    elif hasattr(conv, "__iter__"):
+                        try:
+                            messages = list(conv)
+                        except:
+                            messages = []
+                    
+                    logger.debug(f"DEBUG: 对话历史中有 {len(messages)} 条消息")
+                    
+                    # 处理每条消息
+                    for idx, msg in enumerate(messages):
+                        try:
+                            # 获取消息内容（可能是列表或字符串）
+                            content = None
+                            raw_content = None
+                            
+                            if hasattr(msg, "content"):
+                                raw_content = msg.content
+                            elif hasattr(msg, "text"):
+                                raw_content = msg.text
+                            elif hasattr(msg, "message"):
+                                raw_content = msg.message
+                            elif isinstance(msg, str):
+                                raw_content = msg
+                            
+                            # 处理列表类型的 content
+                            if raw_content:
+                                if isinstance(raw_content, list):
+                                    content = " ".join(str(c) for c in raw_content if c)
+                                elif isinstance(raw_content, str):
+                                    content = raw_content
+                                else:
+                                    content = str(raw_content)
+                            
+                            if not content or (isinstance(content, str) and not content.strip()):
+                                continue
+                            
+                            # 创建唯一标识符（使用索引+内容前50字符）
+                            msg_hash = hash(f"{idx}_{content[:50]}")
+                            if msg_hash in saved_message_hashes:
+                                continue
+                            
+                            saved_message_hashes.add(msg_hash)
+                            
+                            # 获取角色
+                            role = None
+                            if hasattr(msg, "role"):
+                                role = msg.role
+                            elif hasattr(msg, "source"):
+                                role = msg.source
+                            elif hasattr(msg, "sender"):
+                                role = msg.sender
+                            
+                            # 判断角色
+                            if role:
+                                role_lower = role.lower()
+                                if role_lower in ("user", "remote", "participant"):
+                                    role = "user"
+                                elif role_lower in ("assistant", "agent", "local"):
+                                    role = "agent"
+                                else:
+                                    # 尝试从 participant_identity 推断
+                                    participant_identity = getattr(msg, "participant_identity", None)
+                                    if participant_identity:
+                                        role = "user" if not participant_identity.startswith("agent-") else "agent"
+                                    else:
+                                        # 根据索引推断（通常第一条是用户，第二条是agent，以此类推）
+                                        role = "user" if idx % 2 == 0 else "agent"
+                            else:
+                                # 无法判断角色，根据索引推断
+                                role = "user" if idx % 2 == 0 else "agent"
+                            
+                            # 获取用户ID
+                            user_id = getattr(msg, "user_identity", None) \
+                                   or getattr(msg, "participant_identity", None)
+                            
+                            if not user_id:
+                                user_id = get_user_id_from_room()
+                            
+                            if user_id:
+                                logger.info(f"DEBUG: 从对话历史保存记录: idx={idx}, role={role}, content={content[:50]}...")
+                                asyncio.create_task(
+                                    _save_conversation_async(room_name, user_id, role, content)
+                                )
+                                
+                        except Exception as e:
+                            logger.error(f"处理单条消息失败: {e}", exc_info=True)
+                
+                await asyncio.sleep(2)  # 每2秒检查一次
+                
+            except Exception as e:
+                logger.error(f"监控对话历史失败（不影响Agent）: {e}", exc_info=True)
+                await asyncio.sleep(5)  # 出错后等待更长时间
+    
+    # 设置事件钩子
+    setup_conversation_hooks()
+    
+    # 启动后台任务定期检查对话历史
+    asyncio.create_task(save_conversation_periodically())
     
     # 生成初始回复
     await session.generate_reply()
