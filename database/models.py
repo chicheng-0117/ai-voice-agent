@@ -45,3 +45,22 @@ class Room(Base):
         Index("idx_created_at", "created_at"),
     )
 
+
+class Conversation(Base):
+    """对话记录表"""
+    __tablename__ = "ai_voice_conversations"
+    
+    id = Column(Integer, primary_key=True, comment="ID")
+    room_name = Column(String(100), nullable=False, comment="房间名称")
+    user_id = Column(String(100), nullable=False, comment="用户ID")
+    role = Column(String(20), nullable=False, comment="角色：user, agent")
+    content = Column(Text, nullable=False, comment="对话内容")
+    created_at = Column(DateTime, nullable=False, server_default=func.now(), comment="创建时间")
+    
+    __table_args__ = (
+        Index("idx_room_name", "room_name"),
+        Index("idx_user_id", "user_id"),
+        Index("idx_created_at", "created_at"),
+        Index("idx_room_created", "room_name", "created_at"),
+    )
+

@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from database.models import Agent, Room
+from database.models import Agent, Room, Conversation
 import logging
 
 logger = logging.getLogger(__name__)
@@ -77,4 +77,66 @@ class RoomRepository:
         )
         await session.flush()
         return result.rowcount > 0
+
+
+class ConversationRepository:
+    """对话记录数据仓库"""
+    
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        room_name: str,
+        user_id: str,
+        role: str,
+        content: str,
+    ) -> Conversation:
+        """创建对话记录
+        
+        Args:
+            session: 数据库会话
+            room_name: 房间名称
+            user_id: 用户ID
+            role: 角色（user 或 agent）
+            content: 对话内容
+            
+        Returns:
+            Conversation: 创建的对话记录
+        """
+        conversation = Conversation(
+            room_name=room_name,
+            user_id=user_id,
+            role=role,
+            content=content,
+            created_at=datetime.now(),
+        )
+        session.add(conversation)
+        await session.flush()
+        await session.refresh(conversation)
+        return conversation
+    
+    @staticmethod
+    async def get_by_room(
+        session: AsyncSession,
+        room_name: str,
+        limit: Optional[int] = None
+    ) -> list[Conversation]:
+        """根据房间名称获取对话记录
+        
+        Args:
+            session: 数据库会话
+            room_name: 房间名称
+            limit: 限制返回数量
+            
+        Returns:
+            list[Conversation]: 对话记录列表
+        """
+        query = select(Conversation).where(
+            Conversation.room_name == room_name
+        ).order_by(Conversation.created_at.asc())
+        
+        if limit:
+            query = query.limit(limit)
+        
+        result = await session.execute(query)
+        return list(result.scalars().all())
 

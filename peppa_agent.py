@@ -3,6 +3,7 @@ import os
 import logging
 import asyncio
 from datetime import datetime
+from typing import Optional
 from dotenv import load_dotenv
 
 # ⚠️ 必须在所有导入之前加载环境变量
@@ -14,7 +15,7 @@ from livekit.plugins import fishaudio, noise_cancellation, silero, openai, deepg
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 # 导入数据库模块
-from database import AsyncSessionLocal, RoomRepository
+from database import AsyncSessionLocal, RoomRepository, ConversationRepository
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,10 +190,19 @@ async def peppa_agent(ctx: agents.JobContext):
     
     logger.info(f"✓ Agent 'peppa' 会话已启动，房间: {ctx.room.name}")
     
+    # 获取用户ID（从房间参与者中获取，排除Agent）
+    def get_user_id_from_room() -> Optional[str]:
+        """从房间中获取用户ID（排除Agent）"""
+        for participant in ctx.room.remote_participants.values():
+            identity = participant.identity
+            if not identity.startswith("agent-") and not identity.startswith("Agent-"):
+                return identity
+        return None
+    
     # ========== 用户进入房间的回调 ==========
     @ctx.room.on("participant_connected")
-    async def on_participant_connected(participant: rtc.RemoteParticipant):
-        """用户进入房间的回调 - 记录用户加入时间"""
+    def on_participant_connected(participant: rtc.RemoteParticipant):
+        """用户进入房间的回调 - 记录用户加入时间（同步回调）"""
         try:
             # 跳过 Agent 自己
             if participant.identity.startswith("agent-") or participant.identity.startswith("Agent-"):
@@ -236,8 +246,8 @@ async def peppa_agent(ctx: agents.JobContext):
     
     # ========== 用户离开房间的回调 ==========
     @ctx.room.on("participant_disconnected")
-    async def on_participant_disconnected(participant: rtc.RemoteParticipant):
-        """用户离开房间的回调 - 记录用户离开时间和聊天时长"""
+    def on_participant_disconnected(participant: rtc.RemoteParticipant):
+        """用户离开房间的回调 - 记录用户离开时间和聊天时长（同步回调）"""
         try:
             # 跳过 Agent 自己
             if participant.identity.startswith("agent-") or participant.identity.startswith("Agent-"):
@@ -283,6 +293,65 @@ async def peppa_agent(ctx: agents.JobContext):
                         logger.warning(f"房间 {room_name} 没有用户加入记录，跳过离开时间更新")
                 except Exception as e:
                     logger.error(f"记录用户离开失败（不影响Agent）: {e}", exc_info=True)
+                    await db.rollback()
+        except Exception as e:
+            logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
+    
+    # ========== 对话记录功能 ==========
+    # 监听用户语音转文字事件
+    @session.on("user_speech_committed")
+    def on_user_speech(transcript: str):
+        """用户语音转文字后保存对话记录（同步回调）"""
+        try:
+            user_id = get_user_id_from_room()
+            if not user_id:
+                logger.debug("未找到用户ID，跳过对话记录")
+                return
+            
+            room_name = ctx.room.name
+            
+            # 保存用户消息到数据库（完全非阻塞）
+            asyncio.create_task(
+                _save_conversation_async(room_name, user_id, "user", transcript)
+            )
+        except Exception as e:
+            logger.error(f"处理用户语音回调失败（不影响Agent）: {e}", exc_info=True)
+    
+    # 监听Agent回复生成事件
+    @session.on("agent_response_committed")
+    def on_agent_response(text: str):
+        """Agent回复生成后保存对话记录（同步回调）"""
+        try:
+            user_id = get_user_id_from_room()
+            if not user_id:
+                logger.debug("未找到用户ID，跳过对话记录")
+                return
+            
+            room_name = ctx.room.name
+            
+            # 保存Agent回复到数据库（完全非阻塞）
+            asyncio.create_task(
+                _save_conversation_async(room_name, user_id, "agent", text)
+            )
+        except Exception as e:
+            logger.error(f"处理Agent回复回调失败（不影响Agent）: {e}", exc_info=True)
+    
+    async def _save_conversation_async(room_name: str, user_id: str, role: str, content: str):
+        """异步保存对话记录（完全非阻塞）"""
+        try:
+            if not content or not content.strip():
+                logger.debug(f"对话内容为空，跳过保存: role={role}")
+                return
+            
+            async with AsyncSessionLocal() as db:
+                try:
+                    await ConversationRepository.create(
+                        db, room_name, user_id, role, content
+                    )
+                    await db.commit()
+                    logger.debug(f"✓ 已保存对话记录: {room_name} - {role}")
+                except Exception as e:
+                    logger.error(f"保存对话记录失败（不影响Agent）: {e}", exc_info=True)
                     await db.rollback()
         except Exception as e:
             logger.error(f"数据库连接失败（不影响Agent）: {e}", exc_info=True)
