@@ -1,9 +1,10 @@
 
 import os
+import json
 import logging
 import asyncio
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 # ⚠️ 必须在所有导入之前加载环境变量
@@ -23,11 +24,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 支持的语言（STT + 提示词约束）；仅允许 en-US / pt / es，其余用 en-US
+SUPPORTED_LANGUAGES = ("en-US", "pt", "es")
+DEFAULT_LANGUAGE = "es"
 
-class Assistant(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions="""
+# 提示词中“语言约束”一行，按语言替换
+LANGUAGE_CONSTRAINT = {
+    "en-US": "- Reply in English only.",
+    "pt": "- Reply in Portuguese (português) only.",
+    "es": "- Reply in Spanish (español) only.",
+}
+
+# 提示词模板：占位符 {language_constraint} 由上面 LANGUAGE_CONSTRAINT 按语言填入
+INSTRUCTIONS_TEMPLATE = """
             Character
             You are Peppa Pig from the beloved British animated series. You are a cheerful, curious, and playful 4-year-old pig who loves talking with children aged 8-12. Your task is to have fun, friendly conversations with users, answer their questions, share stories about your adventures, and help them feel happy and engaged. You speak in a natural, child-friendly way that makes children feel comfortable and excited to chat with you.
             
@@ -65,7 +74,7 @@ class Assistant(Agent):
             - Mention family members naturally (George, Daddy Pig, Mummy Pig) when relevant
             - Use British English expressions and pronunciation
             - Never use complex formatting, emojis, asterisks, or special symbols
-            - Reply in English only
+            {language_constraint}
             - Stay in character as Peppa Pig at all times - never break character
             - Do not refer to yourself as a character or mention that you're from a TV show
             - Keep responses conversational and natural, not overly structured
@@ -87,8 +96,34 @@ class Assistant(Agent):
             - Use "Oink!" or "Ha ha!" naturally when appropriate
             - End in a way that invites them to continue chatting
             
-            Remember: You're having a real conversation with a child, not giving a formal presentation. Be spontaneous, natural, and genuinely interested in what they have to say.""",
-        )
+            Remember: You're having a real conversation with a child, not giving a formal presentation. Be spontaneous, natural, and genuinely interested in what they have to say."""
+
+
+def _parse_room_metadata(room_metadata: str) -> Dict[str, Any]:
+    """解析房间 metadata：优先 JSON，否则按 key:value 解析（兼容 agent:peppa）。"""
+    meta: Dict[str, Any] = {}
+    raw = (room_metadata or "").strip()
+    if not raw:
+        return meta
+    if raw.startswith("{"):
+        try:
+            meta = json.loads(raw)
+            return meta if isinstance(meta, dict) else {}
+        except json.JSONDecodeError:
+            pass
+    # 兼容 "agent:peppa" 等形式
+    for part in raw.split():
+        if ":" in part:
+            k, _, v = part.partition(":")
+            meta[k.strip()] = v.strip()
+    return meta
+
+
+class Assistant(Agent):
+    def __init__(self, language: str = "en-US") -> None:
+        lang_line = LANGUAGE_CONSTRAINT.get(language, LANGUAGE_CONSTRAINT[DEFAULT_LANGUAGE])
+        instructions = INSTRUCTIONS_TEMPLATE.format(language_constraint=lang_line)
+        super().__init__(instructions=instructions)
 
 
 server = AgentServer()
@@ -116,21 +151,19 @@ async def peppa_agent(ctx: agents.JobContext):
         f"metadata={room_metadata or '(无)'}"
     )
     
-    # 如果房间名称是 "console"，跳过 agent:peppa 校验
+    # 解析 metadata（支持 JSON 或 agent:peppa 形式）
+    meta = _parse_room_metadata(room_metadata)
     room_name = ctx.room.name
     is_console_room = room_name.lower() == "console"
-    
+
     if not is_console_room:
-        # 检查元数据是否匹配
-        expected_metadata = "agent:peppa"
-        
-        if expected_metadata not in room_metadata:
+        # 检查元数据是否匹配（JSON 时 meta["agent"]=="peppa"，旧格式解析后同样）
+        if meta.get("agent") != "peppa":
             logger.info(
                 f"⚠️  Agent 'peppa' 跳过房间 {ctx.room.name}，"
-                f"metadata: {room_metadata!r}（期望包含 {expected_metadata!r}）"
+                f"metadata: {room_metadata!r}（期望 agent=peppa）"
             )
-            return  # 不匹配，跳过此任务
-        
+            return
         logger.info(
             f"✓ Agent 'peppa' 处理房间 {ctx.room.name}，metadata: {room_metadata!r}"
         )
@@ -138,6 +171,12 @@ async def peppa_agent(ctx: agents.JobContext):
         logger.info(
             f"✓ Agent 'peppa' 处理 console 房间 {ctx.room.name}（跳过 metadata 校验）"
         )
+
+    # 从 metadata 取语言，仅允许 en-US / pt / es，否则用 en-US
+    language = (meta.get("language") or DEFAULT_LANGUAGE).strip()
+    if language not in SUPPORTED_LANGUAGES:
+        language = DEFAULT_LANGUAGE
+    logger.info(f"使用语言: {language}")
 
     reference_id = os.getenv("FISH_REFERENCE_ID")
     if not reference_id:
@@ -156,11 +195,11 @@ async def peppa_agent(ctx: agents.JobContext):
     if not deepgram_api_key:
         raise RuntimeError("请设置环境变量 DEEPGRAM_API_KEY")
 
-    # 使用显式的 API key 配置 STT 和 LLM
-    # Deepgram 插件使用的是 Deepgram 原生模型名，这里应为 "nova-3"
+    # 使用显式的 API key 配置 STT 和 LLM，STT 使用 metadata 中的 language
     dg_stt = deepgram.STT(
         model="nova-3",
         api_key=deepgram_api_key,
+        language=language,
     )
 
     oa_llm = openai.LLM(
@@ -298,7 +337,7 @@ async def peppa_agent(ctx: agents.JobContext):
     # ========== 启动会话（移除噪声消除，自托管不支持）==========
     await session.start(
         room=ctx.room,
-        agent=Assistant(),
+        agent=Assistant(language=language),
         # 自托管不支持噪声消除，移除 room_options
     )
     

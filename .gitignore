@@ -71,3 +71,7 @@ logs/
 *.bak
 *.swp
 *~
+
+*.mp3
+*.csv
+deploy/
