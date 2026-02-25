@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # 支持的语言（STT + 提示词约束）；仅允许 en-US / pt / es，其余用 en-US
 SUPPORTED_LANGUAGES = ("en-US", "pt", "es")
-DEFAULT_LANGUAGE = "es"
+DEFAULT_LANGUAGE = "en-US"
 
 # 提示词中“语言约束”一行，按语言替换
 LANGUAGE_CONSTRAINT = {
@@ -133,27 +133,26 @@ server = AgentServer()
 async def peppa_agent(ctx: agents.JobContext):
     """Peppa Agent - 处理所有房间，通过元数据判断是否处理"""
     
-    logger.info(
-        f"收到任务: 房间={ctx.room.name}, "
-        f"job_id={ctx.job.id}"
-    )
-    
-    # 直接从 JobContext 获取房间元数据（不需要先连接）
-    room_metadata = ctx.room.metadata or ""
-    
-    # 如果 metadata 为空，尝试从房间名称推断
-    if not room_metadata and "peppa" in ctx.room.name.lower():
-        room_metadata = "agent:peppa"  # 从房间名称推断
-        logger.info(f"从房间名称推断 metadata: {room_metadata}")
-    
-    logger.info(
-        f"房间信息: name={ctx.room.name}, "
-        f"metadata={room_metadata or '(无)'}"
-    )
+    room_name = ctx.room.name
+    logger.info(f"收到任务: 房间={room_name}, job_id={ctx.job.id}")
+
+    # 进房间前从数据库按房间名获取 metadata（数据库一定有）
+    room_metadata = ""
+    try:
+        async with AsyncSessionLocal() as db:
+            room = await RoomRepository.get_by_name(db, room_name)
+            if room and getattr(room, "room_metadata", None):
+                room_metadata = (room.room_metadata or "").strip()
+            if not room_metadata:
+                logger.warning(f"房间 {room_name} 在数据库中无 metadata，跳过")
+                return
+        logger.info(f"从数据库获取房间 metadata: {room_name} -> {room_metadata}")
+    except Exception as e:
+        logger.error(f"从数据库获取房间 metadata 失败，跳过房间 {room_name}: {e}", exc_info=True)
+        return
     
     # 解析 metadata（支持 JSON 或 agent:peppa 形式）
     meta = _parse_room_metadata(room_metadata)
-    room_name = ctx.room.name
     is_console_room = room_name.lower() == "console"
 
     if not is_console_room:
@@ -169,7 +168,7 @@ async def peppa_agent(ctx: agents.JobContext):
         )
     else:
         logger.info(
-            f"✓ Agent 'peppa' 处理 console 房间 {ctx.room.name}（跳过 metadata 校验）"
+            f"✓ Agent 'peppa' 处理 console 房间 {ctx.room.name}"
         )
 
     # 从 metadata 取语言，仅允许 en-US / pt / es，否则用 en-US
@@ -222,8 +221,6 @@ async def peppa_agent(ctx: agents.JobContext):
         turn_detection=MultilingualModel(),
     )
 
-    room_name = ctx.room.name
-    
     # ========== 辅助函数 ==========
     def get_user_id_from_participant(participant: rtc.RemoteParticipant) -> Optional[str]:
         """从参与者获取用户ID（排除Agent）"""

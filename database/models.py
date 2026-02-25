@@ -29,6 +29,8 @@ class Room(Base):
     agent_name = Column(String(50), nullable=False, comment="Agent名称")
     user_id = Column(String(100), nullable=False, comment="用户ID")
     room_token = Column(Text, nullable=True, comment="LiveKit访问Token")
+    # Python 属性名用 room_metadata，数据库列名为 metadata（与 ai-voice-service 一致）
+    room_metadata = Column("metadata", Text, nullable=True, comment="房间元数据 JSON，如 agent/country/language")
     timeout_minutes = Column(Integer, nullable=False, default=3, comment="超时时间（分钟）")
     status = Column(String(20), nullable=False, default="active", comment="状态：active, closed")
     created_at = Column(DateTime, nullable=False, server_default=func.now(), comment="创建时间")
